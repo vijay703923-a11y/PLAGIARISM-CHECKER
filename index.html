@@ -1,41 +1,258 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VerifyAI | Free Plagiarism & Grammar Checker</title>
-    <meta name="description" content="Professional plagiarism detection and grammar correction tool powered by Gemini AI.">
+    <title>VerifyAI | Plagiarism & Grammar Checker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
-        .drag-active { border-color: #4f46e5; background-color: #f5f3ff; }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #c7d2fe; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #818cf8; }
+        body { font-family: 'Inter', sans-serif; }
+        .animate-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "recharts": "https://esm.sh/recharts@^3.7.0",
-    "pdfjs-dist": "https://esm.sh/pdfjs-dist@4.0.379",
-    "jspdf": "https://esm.sh/jspdf@2.5.1"
-  }
-}
-</script>
 </head>
-<body class="bg-slate-50 text-slate-900 overflow-x-hidden">
+<body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
+
+    <script type="text/babel">
+        // --- CONFIGURATION ---
+        // ⚠️ இங்கே உங்கள் API Key-ஐ பேஸ்ட் செய்யவும் (கீழே உள்ள வரியில்)
+        const API_KEY =AIzaSyDJlbqDTKT36HmE9vnnql60RyaKQcxvMCQ; 
+
+        const { useState, useRef, useEffect } = React;
+        const { PieChart, Pie, Cell, ResponsiveContainer } = Recharts;
+
+        // --- ICONS (Simple SVG Components) ---
+        const Icon = ({ name, className }) => <i data-lucide={name} className={className}></i>;
+
+        // --- GAUGE COMPONENT ---
+        const Gauge = ({ value, label, color }) => {
+            const data = [{ name: 'Value', value: value }, { name: 'Remaining', value: 100 - value }];
+            return (
+                <div className="flex flex-col items-center">
+                    <div className="h-32 w-32 relative">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={data} cx="50%" cy="50%" innerRadius={35} outerRadius={50} startAngle={180} endAngle={0} dataKey="value">
+                                    <Cell fill={color} />
+                                    <Cell fill="#f1f5f9" />
+                                </Pie>
+                            </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex items-end justify-center pb-2">
+                            <span className="text-xl font-black text-slate-700">{value}%</span>
+                        </div>
+                    </div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2">{label}</span>
+                </div>
+            );
+        };
+
+        // --- GEMINI SERVICE ---
+        const analyzeText = async (text) => {
+            if (API_KEY === "YOUR_GEMINI_API_KEY") {
+                alert("Please add your Gemini API Key in the code!");
+                throw new Error("API Key missing");
+            }
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${API_KEY}`;
+            
+            const systemPrompt = `
+            You are a strict academic integrity officer. Analyze the text for plagiarism and grammar.
+            Output ONLY valid JSON matching this structure:
+            {
+                "plagiarismPercentage": number,
+                "grammarScore": number,
+                "subtopics": [{"title": "string", "segmentIndex": number}],
+                "segments": [
+                    {
+                        "text": "exact segment text",
+                        "type": "original" | "plagiarism" | "grammar",
+                        "suggestions": ["string"],
+                        "explanation": "string",
+                        "sourceUrl": "string (fake url for demo if needed)"
+                    }
+                ]
+            }
+            Do not include markdown code blocks. Just the JSON string.
+            `;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{ text: systemPrompt + "\n\nAnalyze this text:\n" + text }]
+                    }]
+                })
+            });
+
+            const data = await response.json();
+            try {
+                const textResult = data.candidates[0].content.parts[0].text;
+                // Clean up markdown if Gemini adds it
+                const cleanJson = textResult.replace(/```json/g, '').replace(/```/g, '');
+                return JSON.parse(cleanJson);
+            } catch (e) {
+                console.error("AI Error:", e);
+                throw new Error("Failed to parse AI response");
+            }
+        };
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [inputText, setInputText] = useState('');
+            const [status, setStatus] = useState('IDLE');
+            const [result, setResult] = useState(null);
+            const [selectedSegment, setSelectedSegment] = useState(null);
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [result, selectedSegment, status]);
+
+            const handleAnalyze = async () => {
+                if (!inputText.trim()) return;
+                setStatus('ANALYZING');
+                try {
+                    const data = await analyzeText(inputText);
+                    setResult(data);
+                    setStatus('SUCCESS');
+                } catch (err) {
+                    alert("Analysis failed. Check Console or API Key.");
+                    setStatus('IDLE');
+                }
+            };
+
+            const handleReset = () => {
+                setInputText('');
+                setResult(null);
+                setStatus('IDLE');
+            };
+
+            const replaceSegment = (suggestion) => {
+                if (!selectedSegment || !result) return;
+                const newSegments = result.segments.map(s => 
+                    s === selectedSegment ? { ...s, text: suggestion, type: 'original' } : s
+                );
+                setResult({ ...result, segments: newSegments });
+                setSelectedSegment(null);
+            };
+
+            const exportToPDF = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.text(result.segments.map(s => s.text).join(' '), 10, 10, { maxWidth: 180 });
+                doc.save("VerifyAI_Report.pdf");
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* HEADER */}
+                    <header className="bg-white/90 backdrop-blur border-b border-slate-200 sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className="bg-indigo-600 p-2 rounded-xl"><Icon name="shield-check" className="text-white w-5 h-5" /></div>
+                                <h1 className="text-xl font-black tracking-tight">Verify<span className="text-indigo-600">AI</span></h1>
+                            </div>
+                            {result && <button onClick={handleReset} className="text-slate-400 hover:text-indigo-600 font-bold text-xs uppercase"><Icon name="refresh-ccw" className="w-3 h-3 inline mr-1" /> New Check</button>}
+                        </div>
+                    </header>
+
+                    {/* MAIN CONTENT */}
+                    <main className="flex-grow max-w-7xl mx-auto px-4 py-10 w-full">
+                        {status === 'IDLE' && (
+                            <div className="max-w-3xl mx-auto text-center mb-10 animate-in">
+                                <h2 className="text-5xl font-black text-slate-900 mb-4">Write with <span className="text-indigo-600">confidence</span>.</h2>
+                                <textarea 
+                                    value={inputText}
+                                    onChange={(e) => setInputText(e.target.value)}
+                                    placeholder="Paste your text here..." 
+                                    className="w-full h-64 p-6 rounded-3xl border border-slate-200 focus:ring-4 focus:ring-indigo-100 outline-none text-lg"
+                                ></textarea>
+                                <button 
+                                    onClick={handleAnalyze}
+                                    disabled={!inputText.trim()}
+                                    className="mt-6 bg-indigo-600 text-white px-10 py-4 rounded-xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
+                                >
+                                    Analyze Text
+                                </button>
+                            </div>
+                        )}
+
+                        {status === 'ANALYZING' && (
+                            <div className="text-center py-20">
+                                <Icon name="loader-2" className="w-12 h-12 animate-spin text-indigo-600 mx-auto" />
+                                <p className="mt-4 font-bold text-slate-500">Analyzing with Gemini AI...</p>
+                            </div>
+                        )}
+
+                        {status === 'SUCCESS' && result && (
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in">
+                                {/* LEFT: EDITOR */}
+                                <div className="lg:col-span-8 bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-100">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="font-black text-2xl">Results</h3>
+                                        <button onClick={exportToPDF} className="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase"><Icon name="download" className="w-3 h-3 inline mr-1" /> PDF</button>
+                                    </div>
+                                    <div className="leading-loose text-lg text-slate-700 font-serif">
+                                        {result.segments.map((seg, i) => (
+                                            <span 
+                                                key={i} 
+                                                onClick={() => seg.type !== 'original' && setSelectedSegment(seg)}
+                                                className={`cursor-pointer px-1 rounded transition-colors ${seg.type === 'plagiarism' ? 'bg-red-100 text-red-800' : seg.type === 'grammar' ? 'bg-amber-100 text-amber-800' : ''}`}
+                                            >
+                                                {seg.text}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* RIGHT: STATS & SUGGESTIONS */}
+                                <div className="lg:col-span-4 space-y-6">
+                                    <div className="bg-white p-6 rounded-[2rem] border border-slate-100 text-center">
+                                        <div className="flex justify-around">
+                                            <Gauge value={result.plagiarismPercentage} label="Similarity" color="#f43f5e" />
+                                            <Gauge value={result.grammarScore} label="Grammar" color="#10b981" />
+                                        </div>
+                                    </div>
+
+                                    {selectedSegment ? (
+                                        <div className="bg-white p-6 rounded-[2rem] border-2 border-indigo-100 shadow-xl animate-in">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <span className="text-xs font-black uppercase text-indigo-500">Suggestion</span>
+                                                <button onClick={() => setSelectedSegment(null)}><Icon name="x" className="w-4 h-4 text-slate-400" /></button>
+                                            </div>
+                                            <p className="text-sm text-slate-500 mb-4 italic">"{selectedSegment.explanation}"</p>
+                                            <div className="space-y-2">
+                                                {selectedSegment.suggestions?.map((s, i) => (
+                                                    <button key={i} onClick={() => replaceSegment(s)} className="w-full text-left p-3 bg-indigo-50 hover:bg-indigo-100 rounded-xl text-sm font-bold text-indigo-900">{s}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-indigo-600 p-8 rounded-[2rem] text-white text-center">
+                                            <Icon name="sparkles" className="w-8 h-8 mx-auto mb-2 opacity-80" />
+                                            <p className="text-sm font-medium opacity-80">Click highlighted text to see AI suggestions.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
 </body>
 </html>
-
-
