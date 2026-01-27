@@ -26,5 +26,3 @@ export enum AnalysisStatus {
   SUCCESS = 'SUCCESS',
   ERROR = 'ERROR'
 }
-
-
